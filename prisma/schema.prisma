@@ -8,26 +8,47 @@ datasource db {
 }
 
 model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  phone_number    String   @unique
+  username        String   @unique
+  password        String   
+  firstName       String
+  lastName        String
+  avatar          String?
+  role            Role     @default(USER)
+  is_email_verified Boolean @default(false)
+  is_phone_verified Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  channel          Channel?
+  videos           Video[]
+  comments         Comment[]
+  likes            Like[]
+  subscriptions    Subscription[] @relation("UserSubscriptions")
+  subscribers      Subscription[] @relation("UserSubscribers")
+  playlists        Playlist[]
+  watchHistory     WatchHistory[]
+  notifications    Notification[]
+}
+
+model Channel {
   id                String   @id @default(uuid())
-  phone_number      String   @unique
-  email             String   @unique
+  name              String
   username          String   @unique
-  password          String
-  firstName         String
-  lastName          String
-  avatar            String?
-  role              Role     @default(USER)
-  is_email_verified Boolean  @default(false)
-  is_phone_verified Boolean  @default(true)
+  banner            String?
+  description       String?
+  isBlocked         Boolean  @default(false)
+  blockedUntil      DateTime?
+  loginAttempts     Int      @default(0)
+  subscribersCount  Int      @default(0)
+  totalViews        BigInt   @default(0)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  videos        Video[]
-  comments      Comment[]
-  likes         Like[]
-  subscriptions Subscription[] @relation("UserSubscriptions")
-  subscribers   Subscription[] @relation("UserSubscribers")
-  playlists     Playlist[]
+  ownerId           String   @unique
+  owner             User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model Video {
@@ -39,23 +60,28 @@ model Video {
   duration      Int
   status        VideoStatus @default(PROCESSING)
   visibility    Visibility  @default(PUBLIC)
-  viewsCount    BigInt      @default(0)
+  viewsCount    Int         @default(0)
   likesCount    Int         @default(0)
   dislikesCount Int         @default(0)
   createdAt     DateTime    @default(now())
+  category      String?
+  tags          String[]
 
-  authorId String
-  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  comments Comment[]
-  likes    Like[]
+  authorId       String
+  author         User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments       Comment[]
+  likes          Like[]
+  playlistVideos PlaylistVideo[]
+  watchHistory   WatchHistory[]
 
-  playlists PlaylistVideo[]
+  @@map("videos")
 }
 
 model Comment {
   id         String   @id @default(uuid())
   content    String
   likesCount Int      @default(0)
+  dislikeCount Int    @default(0)
   createdAt  DateTime @default(now())
 
   authorId String
@@ -63,7 +89,14 @@ model Comment {
   videoId  String
   video    Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
   likes    Like[]
+
+  parentId String?
+  replies  Comment[] @relation("CommentReplies")
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+
+  @@map("comments")
 }
+
 
 model Subscription {
   id                   String   @id @default(cuid())
@@ -75,6 +108,7 @@ model Subscription {
   createdAt            DateTime @default(now())
 
   @@unique([subscriberId, channelId])
+  @@map("subscriptions")
 }
 
 model Playlist {
@@ -87,12 +121,14 @@ model Playlist {
   authorId String
   author   User            @relation(fields: [authorId], references: [id], onDelete: Cascade)
   videos   PlaylistVideo[]
+
+  @@map("playlists")
 }
 
 model PlaylistVideo {
-  id       String   @id @default(cuid())
-  position Int
-  addedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  position   Int
+  addedAt    DateTime @default(now())
 
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
@@ -100,6 +136,7 @@ model PlaylistVideo {
   video      Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([playlistId, videoId])
+  @@map("playlist_videos")
 }
 
 model Like {
@@ -116,11 +153,40 @@ model Like {
 
   @@unique([userId, videoId, type])
   @@unique([userId, commentId, type])
+  @@map("likes")
 }
 
-enum LikeType {
-  LIKE
-  DISLIKE
+model WatchHistory {
+  id          String   @id @default(cuid())
+  watchedAt   DateTime @default(now())
+  watchTime   Int
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  NEW_VIDEO
+  NEW_SUBSCRIBER
+  VIDEO_LIKED
+  COMMENT_REPLY
+  MENTION
 }
 
 enum Role {
@@ -142,4 +208,9 @@ enum Visibility {
   PUBLIC
   UNLISTED
   PRIVATE
+}
+
+enum LikeType {
+  LIKE
+  DISLIKE
 }
